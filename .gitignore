@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Generated Spreadsheets & Excel Temporary Files
+.~*.xlsx
+.~*.xls
+Absen_Bulan_*.xlsx
+output_absen*.xlsx
+template_custom.xlsx
+output_test_integration.xlsx
+
+# Node / React Frontend
+frontend/node_modules/
+frontend/dist/
+.npm_cache/
+
+# OS Specific
+.DS_Store
+Thumbs.db
