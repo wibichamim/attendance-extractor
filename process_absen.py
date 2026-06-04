@@ -477,10 +477,12 @@ def write_to_excel(
     FileNotFoundError
         If the template file does not exist.
     """
-    if not os.path.isfile(template_path):
-        raise FileNotFoundError(f"Template file not found: {template_path}")
-
-    wb = load_workbook(template_path)
+    if isinstance(template_path, str):
+        if not os.path.isfile(template_path):
+            raise FileNotFoundError(f"Template file not found: {template_path}")
+        wb = load_workbook(template_path)
+    else:
+        wb = load_workbook(template_path)
     ws = wb.active
 
     # Configure print settings to E54 and 75% scale on portrait A4

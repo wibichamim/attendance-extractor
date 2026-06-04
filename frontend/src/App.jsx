@@ -44,11 +44,18 @@ export default function App() {
   const [monthNum, setMonthNum] = useState(null)
   const [dragActive, setDragActive] = useState(false)
 
-  // Template states
-  const [templateStatus, setTemplateStatus] = useState({
-    is_custom: false,
-    active_template: 'template_absen.xlsx',
-    available_templates: []
+  // Template states stored in browser localStorage for multi-user isolation
+  const [templateStatus, setTemplateStatus] = useState(() => {
+    const isCustom = localStorage.getItem('absen_template_is_custom') === 'true'
+    const activeName = localStorage.getItem('absen_template_name') || 'template_absen.xlsx'
+    return {
+      is_custom: isCustom,
+      active_template: activeName,
+      available_templates: isCustom ? [activeName] : ['template_absen.xlsx']
+    }
+  })
+  const [customTemplateB64, setCustomTemplateB64] = useState(() => {
+    return localStorage.getItem('absen_custom_template_b64') || ''
   })
   const [isUploadingTemplate, setIsUploadingTemplate] = useState(false)
 
@@ -131,22 +138,7 @@ export default function App() {
     }
   }, [loggedInUsername, isConnected])
 
-  const fetchTemplateStatus = async () => {
-    try {
-      const res = await fetch('/api/template-status')
-      if (res.ok) {
-        const data = await res.json()
-        setTemplateStatus(data)
-      }
-    } catch (err) {
-      console.error('Failed to fetch template status:', err)
-    }
-  }
 
-  // Load template status on mount
-  useEffect(() => {
-    fetchTemplateStatus()
-  }, [])
 
   // Connection health check
   useEffect(() => {
@@ -306,29 +298,49 @@ export default function App() {
     addToast('info', 'Logged out. Session cookies cleared.')
   }
 
-  // Action: Download current template
+  // Action: Download current template (either local custom or default from server)
   const handleDownloadTemplate = async () => {
     try {
-      const response = await fetch('/api/download-template')
-      if (!response.ok) throw new Error('Failed to download template')
-      
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = templateStatus.active_template || 'template_absen.xlsx'
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      window.URL.revokeObjectURL(url)
-      addToast('success', 'Excel template downloaded successfully.')
+      if (templateStatus.is_custom && customTemplateB64) {
+        const byteCharacters = atob(customTemplateB64)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+        
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = templateStatus.active_template || 'template_custom.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+        addToast('success', 'Custom Excel template downloaded from your local browser storage.')
+      } else {
+        const response = await fetch('/api/download-template')
+        if (!response.ok) throw new Error('Failed to download template')
+        
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'template_absen.xlsx'
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        window.URL.revokeObjectURL(url)
+        addToast('success', 'Default Excel template downloaded successfully.')
+      }
     } catch (err) {
       console.error(err)
       addToast('error', `Download failed: ${err.message}`)
     }
   }
 
-  // Action: Upload custom template
+  // Action: Upload custom template (saves to browser localStorage)
   const handleUploadTemplate = async (e) => {
     const file = e.target.files[0]
     if (!file) return
@@ -339,45 +351,68 @@ export default function App() {
     }
     
     setIsUploadingTemplate(true)
-    const formData = new FormData()
-    formData.append('file', file)
     
     try {
-      const res = await fetch('/api/upload-template', {
-        method: 'POST',
-        body: formData
-      })
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        try {
+          const arrayBuffer = event.target.result
+          const bytes = new Uint8Array(arrayBuffer)
+          let binary = ''
+          const len = bytes.byteLength
+          for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i])
+          }
+          const base64String = window.btoa(binary)
+          
+          localStorage.setItem('absen_template_is_custom', 'true')
+          localStorage.setItem('absen_template_name', file.name)
+          localStorage.setItem('absen_custom_template_b64', base64String)
+          
+          setCustomTemplateB64(base64String)
+          setTemplateStatus({
+            is_custom: true,
+            active_template: file.name,
+            available_templates: [file.name]
+          })
+          
+          addToast('success', 'Custom template uploaded and saved locally in your browser!')
+        } catch (innerErr) {
+          console.error(innerErr)
+          addToast('error', `Failed to process template: ${innerErr.message}`)
+        } finally {
+          setIsUploadingTemplate(false)
+        }
+      }
       
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Upload failed')
+      reader.onerror = () => {
+        addToast('error', 'Failed to read file.')
+        setIsUploadingTemplate(false)
+      }
       
-      addToast('success', 'Custom template uploaded successfully!')
-      fetchTemplateStatus()
+      reader.readAsArrayBuffer(file)
     } catch (err) {
       console.error(err)
       addToast('error', `Upload failed: ${err.message}`)
-    } finally {
       setIsUploadingTemplate(false)
-      // Reset input value
+    } finally {
       e.target.value = ''
     }
   }
 
-  // Action: Reset custom template to default
-  const handleResetTemplate = async () => {
-    try {
-      const res = await fetch('/api/reset-template', {
-        method: 'POST'
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Reset failed')
-      
-      addToast('success', 'Reverted to default template.')
-      fetchTemplateStatus()
-    } catch (err) {
-      console.error(err)
-      addToast('error', `Reset failed: ${err.message}`)
-    }
+  // Action: Reset custom template (removes from browser localStorage)
+  const handleResetTemplate = () => {
+    localStorage.removeItem('absen_template_is_custom')
+    localStorage.removeItem('absen_template_name')
+    localStorage.removeItem('absen_custom_template_b64')
+    
+    setCustomTemplateB64('')
+    setTemplateStatus({
+      is_custom: false,
+      active_template: 'template_absen.xlsx',
+      available_templates: ['template_absen.xlsx']
+    })
+    addToast('success', 'Reverted to default template.')
   }
 
   // Action: Upload HTML File
@@ -528,6 +563,7 @@ export default function App() {
         body: JSON.stringify({
           year: year,
           month: monthNum,
+          custom_template: customTemplateB64 || null,
           records: tableData.map(r => ({
             tgl: r.tgl,
             masuk: r.rowType === 'holiday' ? null : r.masuk,
@@ -584,6 +620,7 @@ export default function App() {
         body: JSON.stringify({
           year: year,
           month: monthNum,
+          custom_template: customTemplateB64 || null,
           records: tableData.map(r => ({
             tgl: r.tgl,
             masuk: r.rowType === 'holiday' ? null : r.masuk,
@@ -632,6 +669,7 @@ export default function App() {
         body: JSON.stringify({
           year: year,
           month: monthNum,
+          custom_template: customTemplateB64 || null,
           records: tableData.map(r => ({
             tgl: r.tgl,
             masuk: r.rowType === 'holiday' ? null : r.masuk,
@@ -1302,10 +1340,10 @@ export default function App() {
                   onClick={handleDownloadTemplate}
                   className="btn btn-secondary"
                   style={{ width: '100%', padding: '0.5rem', fontSize: '0.8rem', minHeight: 'auto' }}
-                  title="Download template_absen.xlsx"
+                  title={templateStatus.is_custom ? `Download ${templateStatus.active_template}` : "Download template_absen.xlsx"}
                 >
                   <Download size={14} />
-                  Download template_absen.xlsx
+                  {templateStatus.is_custom ? `Download ${templateStatus.active_template}` : "Download template_absen.xlsx"}
                 </button>
                 
                 <div style={{ display: 'flex', gap: '0.5rem' }}>

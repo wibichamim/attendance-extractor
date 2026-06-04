@@ -547,13 +547,24 @@ def generate_xlsx_endpoint():
     year = data.get("year")
     month = data.get("month")
     
-    if not records_data or not year or not month:
-        return jsonify({"error": "Missing required fields: records, year, month"}), 400
-        
-    template_path = get_template_path()
-    if not os.path.isfile(template_path):
-        logger.error(f"Template not found at: {template_path}")
-        return jsonify({"error": "Excel template file is missing on the server."}), 500
+    custom_template_b64 = data.get("custom_template")
+    if custom_template_b64:
+        try:
+            import base64
+            import io
+            if "," in custom_template_b64:
+                custom_template_b64 = custom_template_b64.split(",")[1]
+            template_bytes = base64.b64decode(custom_template_b64)
+            template_input = io.BytesIO(template_bytes)
+        except Exception as e:
+            logger.error(f"Failed to decode custom template: {e}")
+            return jsonify({"error": f"Invalid custom template base64: {str(e)}"}), 400
+    else:
+        template_path = get_template_path()
+        if not os.path.isfile(template_path):
+            logger.error(f"Template not found at: {template_path}")
+            return jsonify({"error": "Excel template file is missing on the server."}), 500
+        template_input = template_path
 
     try:
         # Convert JSON records list to AttendanceRecord list
@@ -573,7 +584,7 @@ def generate_xlsx_endpoint():
         logger.info(f"Generating Excel file at temp path: {temp_xlsx_path}")
         write_to_excel(
             records=records,
-            template_path=template_path,
+            template_path=template_input,
             output_path=temp_xlsx_path,
             year=int(year),
             month=int(month)
@@ -731,12 +742,23 @@ def preview_endpoint():
     year = data.get("year")
     month = data.get("month")
     
-    if not records_data or not year or not month:
-        return jsonify({"error": "Missing required fields: records, year, month"}), 400
-        
-    template_path = get_template_path()
-    if not os.path.isfile(template_path):
-        return jsonify({"error": "Excel template file is missing on the server."}), 500
+    custom_template_b64 = data.get("custom_template")
+    if custom_template_b64:
+        try:
+            import base64
+            import io
+            if "," in custom_template_b64:
+                custom_template_b64 = custom_template_b64.split(",")[1]
+            template_bytes = base64.b64decode(custom_template_b64)
+            template_input = io.BytesIO(template_bytes)
+        except Exception as e:
+            logger.error(f"Failed to decode custom template: {e}")
+            return jsonify({"error": f"Invalid custom template base64: {str(e)}"}), 400
+    else:
+        template_path = get_template_path()
+        if not os.path.isfile(template_path):
+            return jsonify({"error": "Excel template file is missing on the server."}), 500
+        template_input = template_path
 
     try:
         # Convert JSON records list to AttendanceRecord list
@@ -756,7 +778,7 @@ def preview_endpoint():
         # Write Excel
         write_to_excel(
             records=records,
-            template_path=template_path,
+            template_path=template_input,
             output_path=temp_xlsx_path,
             year=int(year),
             month=int(month)
@@ -798,12 +820,23 @@ def generate_pdf_endpoint():
     year = data.get("year")
     month = data.get("month")
     
-    if not records_data or not year or not month:
-        return jsonify({"error": "Missing required fields: records, year, month"}), 400
-        
-    template_path = get_template_path()
-    if not os.path.isfile(template_path):
-        return jsonify({"error": "Excel template file is missing on the server."}), 500
+    custom_template_b64 = data.get("custom_template")
+    if custom_template_b64:
+        try:
+            import base64
+            import io
+            if "," in custom_template_b64:
+                custom_template_b64 = custom_template_b64.split(",")[1]
+            template_bytes = base64.b64decode(custom_template_b64)
+            template_input = io.BytesIO(template_bytes)
+        except Exception as e:
+            logger.error(f"Failed to decode custom template: {e}")
+            return jsonify({"error": f"Invalid custom template base64: {str(e)}"}), 400
+    else:
+        template_path = get_template_path()
+        if not os.path.isfile(template_path):
+            return jsonify({"error": "Excel template file is missing on the server."}), 500
+        template_input = template_path
 
     import shutil
     import subprocess
@@ -836,7 +869,7 @@ def generate_pdf_endpoint():
         # Write Excel
         write_to_excel(
             records=records,
-            template_path=template_path,
+            template_path=template_input,
             output_path=temp_xlsx_path,
             year=int(year),
             month=int(month)

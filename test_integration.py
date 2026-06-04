@@ -321,10 +321,15 @@ def test_endpoints():
 
         # 4. Test Preview Endpoint
         print("\n4. Testing /api/preview endpoint...")
+        import base64
+        with open("template-table-absen.xlsx", "rb") as f:
+            template_b64 = base64.b64encode(f.read()).decode('utf-8')
+            
         # Since xlsx2html might not be installed in the sandboxed run, we handle both outcomes
         res = client.post('/api/preview', json={
             "year": 2026,
             "month": 5,
+            "custom_template": template_b64,
             "records": [
                 {"tgl": 1, "masuk": "08:00", "pulang": "17:00", "keterangan": None}
             ]
