@@ -24,7 +24,32 @@
   
   --border-color: rgba(255, 255, 255, 0.08);
   --border-focus: rgba(59, 130, 246, 0.5);
+  --bg-input: rgba(0, 0, 0, 0.3);
+  --bg-cell: rgba(0, 0, 0, 0.4);
+  --bg-tab-active: rgba(255, 255, 255, 0.08);
+  --bg-tab-hover: rgba(255, 255, 255, 0.04);
+  --bg-scroll-track: rgba(255, 255, 255, 0.02);
+  --bg-scroll-thumb: rgba(255, 255, 255, 0.15);
+  --bg-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
   
+  /* Additional variables for theme toggle support */
+  --bg-btn-secondary: rgba(255, 255, 255, 0.08);
+  --bg-btn-secondary-hover: rgba(255, 255, 255, 0.12);
+  --bg-info-card: rgba(255, 255, 255, 0.02);
+  --bg-stat-item: rgba(0, 0, 0, 0.2);
+  --bg-table-th: rgba(15, 23, 42, 0.8);
+  --bg-modal: rgba(22, 22, 28, 0.95);
+  --bg-modal-body: #121216;
+  --bg-modal-header: rgba(255, 255, 255, 0.02);
+  --bg-status: rgba(255, 255, 255, 0.03);
+  --bg-cell-input: rgba(0, 0, 0, 0.4);
+  --bg-cell-input-focus: rgba(0, 0, 0, 0.6);
+  --bg-toast: rgba(18, 18, 22, 0.9);
+  --border-toast: rgba(255, 255, 255, 0.1);
+  --bg-weekend: rgba(255, 255, 255, 0.02);
+  --bg-holiday: rgba(245, 158, 11, 0.06);
+  --bg-holiday-merged: rgba(245, 158, 11, 0.04);
+
   --radius-sm: 6px;
   --radius-md: 12px;
   --radius-lg: 20px;
@@ -35,6 +60,62 @@
   --shadow-glow: 0 0 20px 0 rgba(59, 130, 246, 0.15);
 
   color-scheme: dark;
+}
+
+/* Colors - Premium Light Palette */
+:root.light {
+  --bg-app: #f4f5f7;
+  --bg-card: rgba(255, 255, 255, 0.7);
+  --bg-card-hover: rgba(255, 255, 255, 0.85);
+  --border-glow: rgba(37, 99, 235, 0.15);
+  
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-success: #059669;
+  --color-success-bg: rgba(5, 150, 105, 0.08);
+  --color-warning: #d97706;
+  --color-warning-bg: rgba(217, 119, 6, 0.08);
+  --color-danger: #dc2626;
+  --color-danger-bg: rgba(220, 38, 38, 0.08);
+  
+  --text-primary: #09090b;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
+  
+  --border-color: rgba(0, 0, 0, 0.08);
+  --border-focus: rgba(37, 99, 235, 0.4);
+  --bg-input: rgba(255, 255, 255, 0.8);
+  --bg-cell: rgba(255, 255, 255, 0.9);
+  --bg-tab-active: rgba(0, 0, 0, 0.05);
+  --bg-tab-hover: rgba(0, 0, 0, 0.02);
+  --bg-scroll-track: rgba(0, 0, 0, 0.02);
+  --bg-scroll-thumb: rgba(0, 0, 0, 0.15);
+  --bg-scroll-thumb-hover: rgba(0, 0, 0, 0.3);
+  
+  /* Additional variables for theme toggle support */
+  --bg-btn-secondary: rgba(0, 0, 0, 0.05);
+  --bg-btn-secondary-hover: rgba(0, 0, 0, 0.08);
+  --bg-info-card: rgba(0, 0, 0, 0.02);
+  --bg-stat-item: rgba(255, 255, 255, 0.5);
+  --bg-table-th: rgba(241, 245, 249, 0.9);
+  --bg-modal: rgba(255, 255, 255, 0.98);
+  --bg-modal-body: #f1f5f9;
+  --bg-modal-header: rgba(0, 0, 0, 0.02);
+  --bg-status: rgba(0, 0, 0, 0.03);
+  --bg-cell-input: rgba(255, 255, 255, 0.8);
+  --bg-cell-input-focus: rgba(255, 255, 255, 1);
+  --bg-toast: rgba(255, 255, 255, 0.95);
+  --border-toast: rgba(0, 0, 0, 0.08);
+  --bg-weekend: rgba(0, 0, 0, 0.015);
+  --bg-holiday: rgba(245, 158, 11, 0.08);
+  --bg-holiday-merged: rgba(245, 158, 11, 0.05);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  --shadow-glow: 0 0 20px 0 rgba(37, 99, 235, 0.05);
+
+  color-scheme: light;
 }
 
 /* Global Styles */
@@ -56,6 +137,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Custom Scrollbar */
@@ -64,14 +146,14 @@ body {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-scroll-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--bg-scroll-thumb);
   border-radius: var(--radius-sm);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: var(--bg-scroll-thumb-hover);
 }
 
 /* App Container Layout */
@@ -93,7 +175,7 @@ body {
   border-radius: var(--radius-lg);
   padding: 2rem;
   box-shadow: var(--shadow-lg);
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 .glass-panel:hover {
   border-color: rgba(255, 255, 255, 0.12);
@@ -146,7 +228,7 @@ body {
   gap: 0.5rem;
   font-size: 0.85rem;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-status);
   padding: 0.5rem 0.85rem;
   border-radius: 20px;
   border: 1px solid var(--border-color);
@@ -201,11 +283,11 @@ body {
 }
 .tab-btn:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-tab-hover);
 }
 .tab-btn.active {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-tab-active);
   box-shadow: var(--shadow-sm);
 }
 
@@ -233,7 +315,7 @@ input[type="text"],
 input[type="password"],
 input[type="month"],
 textarea {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
@@ -324,12 +406,12 @@ textarea {
   box-shadow: 0 6px 14px rgba(16, 185, 129, 0.35);
 }
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-btn-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-btn-secondary-hover);
 }
 .btn-danger-outline {
   background: rgba(239, 68, 68, 0.08) !important;
@@ -350,7 +432,7 @@ textarea {
 
 /* Quick Info / Stats Card */
 .info-card {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-info-card);
   border-radius: var(--radius-md);
   padding: 1.25rem;
   border: 1px solid var(--border-color);
@@ -372,11 +454,11 @@ textarea {
   gap: 0.75rem;
 }
 .stat-item {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--bg-stat-item);
   padding: 0.75rem;
   border-radius: var(--radius-sm);
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
 }
 .stat-val {
   font-family: var(--font-display);
@@ -427,7 +509,7 @@ textarea {
 }
 
 .attendance-table th {
-  background: rgba(15, 23, 42, 0.8);
+  background: var(--bg-table-th);
   font-weight: 600;
   color: var(--text-secondary);
   padding: 0.75rem 1rem;
@@ -446,25 +528,25 @@ textarea {
 
 /* Row states */
 .row-weekend {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--bg-weekend);
 }
 .row-weekend td {
   color: var(--text-secondary);
 }
 .row-holiday {
-  background-color: rgba(245, 158, 11, 0.06);
+  background-color: var(--bg-holiday);
 }
 .row-holiday-merged-cell {
   color: var(--color-warning) !important;
   font-weight: 600;
   text-align: center;
-  background-color: rgba(245, 158, 11, 0.04);
+  background-color: var(--bg-holiday-merged);
 }
 
 /* Table Input Editing */
 .cell-input {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-cell-input);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
   font-family: var(--font-sans);
@@ -477,7 +559,7 @@ textarea {
 }
 .cell-input:focus {
   border-color: var(--border-focus);
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--bg-cell-input-focus);
   box-shadow: 0 0 5px rgba(59, 130, 246, 0.2);
 }
 .cell-input.invalid {
@@ -488,8 +570,8 @@ textarea {
 
 /* Select element inside cells */
 .cell-select {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-cell-input);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   color: var(--text-primary);
   padding: 0.35rem 0.5rem;
@@ -497,6 +579,7 @@ textarea {
   outline: none;
   font-size: 0.85rem;
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 /* Notifications and Alerts */
@@ -560,8 +643,8 @@ textarea {
   z-index: 1000;
 }
 .toast {
-  background: rgba(18, 18, 22, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-toast);
+  border: 1px solid var(--border-toast);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
@@ -612,7 +695,7 @@ textarea {
 .preview-modal-container {
   width: 90%;
   height: 90%;
-  background: rgba(22, 22, 28, 0.95);
+  background: var(--bg-modal);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
@@ -629,7 +712,7 @@ textarea {
 
 .preview-modal-header {
   padding: 1rem 1.5rem;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--bg-modal-header);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
@@ -653,7 +736,7 @@ textarea {
 
 .preview-modal-body {
   flex: 1;
-  background: #121216;
+  background: var(--bg-modal-body);
   padding: 1.25rem;
   display: flex;
   flex-direction: column;

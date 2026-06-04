@@ -14,7 +14,9 @@ import {
   Lock,
   X,
   Printer,
-  Eye
+  Eye,
+  Sun,
+  Moon
 } from 'lucide-react'
 
 // Regular expression to validate HH:MM time format
@@ -65,6 +67,26 @@ export default function App() {
   const [isIphoneModalOpen, setIsIphoneModalOpen] = useState(false)
   const [loggedInUsername, setLoggedInUsername] = useState('')
   const [guideBrowser, setGuideBrowser] = useState('chrome')
+
+  // Theme state: 'dark' or 'light'
+  const [theme, setTheme] = useState(() => {
+    const storedTheme = localStorage.getItem('absen_theme')
+    if (storedTheme) {
+      return storedTheme
+    }
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    return prefersDark ? 'dark' : 'light'
+  })
+
+  // Sync theme to document element class list
+  useEffect(() => {
+    if (theme === 'light') {
+      document.documentElement.classList.add('light')
+    } else {
+      document.documentElement.classList.remove('light')
+    }
+    localStorage.setItem('absen_theme', theme)
+  }, [theme])
 
   // Load session cookies from localStorage on boot
   useEffect(() => {
@@ -811,9 +833,30 @@ export default function App() {
           </div>
         </div>
         
-        <div className="server-status">
-          <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}></div>
-          <span>{isConnected ? 'Backend Connected' : 'Connecting Backend...'}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button
+            onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
+            className="btn btn-secondary"
+            style={{ 
+              padding: '0.5rem', 
+              borderRadius: '50%', 
+              width: '38px', 
+              height: '38px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          <div className="server-status">
+            <div className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}></div>
+            <span>{isConnected ? 'Backend Connected' : 'Connecting Backend...'}</span>
+          </div>
         </div>
       </header>
 
