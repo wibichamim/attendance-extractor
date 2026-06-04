@@ -57,17 +57,57 @@ export default function App() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
 
+  // Remote Attendance states
+  const [latitude, setLatitude] = useState('-7.7837217165')
+  const [longitude, setLongitude] = useState('110.4329516476')
+  const [isSubmittingRemote, setIsSubmittingRemote] = useState(false)
+  const [deviceToken, setDeviceToken] = useState('')
+  const [isIphoneModalOpen, setIsIphoneModalOpen] = useState(false)
+  const [loggedInUsername, setLoggedInUsername] = useState('')
+  const [guideBrowser, setGuideBrowser] = useState('chrome')
+
   // Load session cookies from localStorage on boot
   useEffect(() => {
     const storedCookie = localStorage.getItem('absen_session_cookie')
     const storedName = localStorage.getItem('absen_user_name')
+    const storedDeviceToken = localStorage.getItem('absen_device_token')
+    const storedUserId = localStorage.getItem('absen_user_id')
     if (storedCookie) {
       setSessionCookie(storedCookie)
     }
     if (storedName) {
       setUserDisplayName(storedName)
     }
+    if (storedDeviceToken) {
+      setDeviceToken(storedDeviceToken)
+    }
+    if (storedUserId) {
+      setLoggedInUsername(storedUserId)
+    }
   }, [])
+
+  // Fetch device token from server on boot or login change
+  useEffect(() => {
+    const loadDeviceTokenFromServer = async () => {
+      const activeUser = loggedInUsername || localStorage.getItem('absen_user_id') || ''
+      try {
+        const res = await fetch(`/api/get-device-token?username=${activeUser}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.device_token) {
+            setDeviceToken(data.device_token)
+            localStorage.setItem('absen_device_token', data.device_token)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch device token from server:', err)
+      }
+    }
+    
+    if (isConnected) {
+      loadDeviceTokenFromServer()
+    }
+  }, [loggedInUsername, isConnected])
 
   const fetchTemplateStatus = async () => {
     try {
@@ -210,9 +250,16 @@ export default function App() {
       
       setSessionCookie(data.session_cookie)
       setUserDisplayName(data.display_name)
+      setLoggedInUsername(data.username || username)
       
       localStorage.setItem('absen_session_cookie', data.session_cookie)
       localStorage.setItem('absen_user_name', data.display_name)
+      localStorage.setItem('absen_user_id', data.username || username)
+      
+      if (data.device_token) {
+        setDeviceToken(data.device_token)
+        localStorage.setItem('absen_device_token', data.device_token)
+      }
       
       addToast('success', `Logged in successfully as ${data.display_name}`)
       
@@ -230,8 +277,10 @@ export default function App() {
   const handleLogout = () => {
     setSessionCookie('')
     setUserDisplayName('')
+    setLoggedInUsername('')
     localStorage.removeItem('absen_session_cookie')
     localStorage.removeItem('absen_user_name')
+    localStorage.removeItem('absen_user_id')
     addToast('info', 'Logged out. Session cookies cleared.')
   }
 
@@ -616,6 +665,120 @@ export default function App() {
     console.error(err)
   }
 
+  // Get user location using browser GPS
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      addToast('error', 'Geolocation is not supported by your browser')
+      return
+    }
+    
+    addToast('info', 'Retrieving GPS coordinates...')
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLatitude(position.coords.latitude.toFixed(10))
+        setLongitude(position.coords.longitude.toFixed(10))
+        addToast('success', 'Location updated from browser GPS!')
+      },
+      (error) => {
+        addToast('error', `Geolocation failed: ${error.message}`)
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  // Send Remote Check-In / Check-Out
+  const handleRemoteAbsen = async (statusVal) => {
+    if (!sessionCookie) {
+      addToast('error', 'Active session cookie is required.')
+      return
+    }
+    
+    setIsSubmittingRemote(true)
+    try {
+      const res = await fetch('/api/remote-absen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_cookie: sessionCookie,
+          latitude: latitude,
+          longitude: longitude,
+          status: statusVal,
+          device_token: deviceToken
+        })
+      })
+      
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.message || data.error || `Server error: ${res.status}`)
+      }
+      
+      if (data.status === 'success') {
+        addToast('success', data.message || 'Remote attendance submitted successfully!')
+      } else {
+        addToast('error', data.message || 'Remote attendance failed.')
+      }
+    } catch (err) {
+      console.error(err)
+      addToast('error', `Failed: ${err.message}`)
+    } finally {
+      setIsSubmittingRemote(false)
+    }
+  }
+
+  const saveTokenToServer = async (tokenValue) => {
+    const activeUser = loggedInUsername || localStorage.getItem('absen_user_id') || 'default'
+    try {
+      await fetch('/api/save-device-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: activeUser, device_token: tokenValue })
+      })
+    } catch (err) {
+      console.error('Failed to sync device token to server:', err)
+    }
+  }
+
+  const handleCopyBookmarklet = () => {
+    const text = `javascript:(function(){var t=localStorage.getItem('token');if(t){alert('Your Device Token:\\n\\n'+t);console.log(t);}else{alert('Token not found. Make sure you are on ksps.co.id/eksternal/');}})();`
+    
+    // Primary: Clipboard API (if available and secure context)
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text)
+        .then(() => addToast('success', 'Bookmarklet code copied to clipboard!'))
+        .catch(() => fallbackCopy(text))
+    } else {
+      fallbackCopy(text)
+    }
+  }
+
+  const fallbackCopy = (text) => {
+    try {
+      const textArea = document.createElement("textarea")
+      textArea.value = text
+      textArea.style.top = "0"
+      textArea.style.left = "0"
+      textArea.style.position = "fixed"
+      textArea.style.opacity = "0"
+      document.body.appendChild(textArea)
+      textArea.focus()
+      textArea.select()
+      
+      const successful = document.execCommand('copy')
+      document.body.removeChild(textArea)
+      
+      if (successful) {
+        addToast('success', 'Bookmarklet code copied to clipboard!')
+      } else {
+        addToast('error', 'Failed to copy code. Please manually select and copy the text box.')
+      }
+    } catch (err) {
+      console.error('Fallback copy failed:', err)
+      addToast('error', 'Failed to copy code. Please manually select and copy the text box.')
+    }
+  }
+
+
+
   return (
     <div className="app-container">
       {/* Toast Messages */}
@@ -935,6 +1098,108 @@ export default function App() {
                   <span>Uploading and parsing files...</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {sessionCookie && (loggedInUsername === '3259800588' || (userDisplayName && userDisplayName.includes('WIBI CHAMIM MUSHODIQ'))) && (
+            <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+                <Clock className="logo-icon" size={20} style={{ color: 'var(--color-primary)' }} />
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>Remote Attendance Punch</h3>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label htmlFor="deviceToken" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span>Device Token (localStorage 'token' on ksps.co.id)</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsIphoneModalOpen(true)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-primary)',
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: 0
+                    }}
+                  >
+                    iPhone Guide
+                  </button>
+                </label>
+                <input 
+                  type="text" 
+                  id="deviceToken" 
+                  value={deviceToken}
+                  onChange={(e) => {
+                    setDeviceToken(e.target.value)
+                    localStorage.setItem('absen_device_token', e.target.value)
+                  }}
+                  onBlur={(e) => saveTokenToServer(e.target.value)}
+                  placeholder="Paste your registered device token..."
+                  style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem' }}>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label htmlFor="latitude" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Latitude (Lintang)</label>
+                  <input 
+                    type="text" 
+                    id="latitude" 
+                    value={latitude}
+                    onChange={(e) => setLatitude(e.target.value)}
+                    placeholder="-7.7837217165"
+                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                  />
+                </div>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label htmlFor="longitude" style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Longitude (Bujur)</label>
+                  <input 
+                    type="text" 
+                    id="longitude" 
+                    value={longitude}
+                    onChange={(e) => setLongitude(e.target.value)}
+                    placeholder="110.4329516476"
+                    style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', marginTop: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={handleGetLocation}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.8rem', minHeight: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}
+                >
+                  <Globe size={14} />
+                  Get GPS Location
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => handleRemoteAbsen('0')}
+                  className="btn btn-primary"
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                  disabled={isSubmittingRemote || isLoading}
+                >
+                  {isSubmittingRemote ? <RefreshCw className="spinner" size={16} /> : <CheckCircle2 size={16} />}
+                  Check-In (Masuk)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRemoteAbsen('1')}
+                  className="btn btn-secondary"
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', border: '1px solid var(--border-color)' }}
+                  disabled={isSubmittingRemote || isLoading}
+                >
+                  {isSubmittingRemote ? <RefreshCw className="spinner" size={16} /> : <Clock size={16} />}
+                  Check-Out (Pulang)
+                </button>
+              </div>
             </div>
           )}
 
@@ -1264,6 +1529,110 @@ export default function App() {
                   title="Attendance Sheet Preview"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* iPhone Device Token Guide Modal */}
+      {isIphoneModalOpen && (
+        <div className="preview-modal-backdrop" onClick={() => setIsIphoneModalOpen(false)}>
+          <div className="preview-modal-container" style={{ maxWidth: '500px', height: 'auto', minHeight: '400px' }} onClick={(e) => e.stopPropagation()}>
+            <div className="preview-modal-header">
+              <div className="preview-modal-title">
+                <Info size={20} color="var(--color-primary)" />
+                <span>iPhone / iOS Device Token Guide</span>
+              </div>
+              <div className="preview-modal-actions">
+                <button 
+                  onClick={() => setIsIphoneModalOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.45rem', minWidth: 'auto', minHeight: 'auto' }}
+                  title="Close Guide"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+            
+            <div className="preview-modal-body" style={{ padding: '1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem', color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+              {/* Browser Toggle */}
+              <div style={{ display: 'flex', gap: '0.5rem', padding: '0.2rem', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setGuideBrowser('chrome')}
+                  style={{
+                    flex: 1,
+                    background: guideBrowser === 'chrome' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    border: 'none',
+                    color: guideBrowser === 'chrome' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    padding: '0.4rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Google Chrome iOS
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuideBrowser('safari')}
+                  style={{
+                    flex: 1,
+                    background: guideBrowser === 'safari' ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    border: 'none',
+                    color: guideBrowser === 'safari' ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    padding: '0.4rem',
+                    borderRadius: '4px',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Safari iOS
+                </button>
+              </div>
+
+              <p style={{ margin: 0 }}>
+                Follow these simple steps using a <strong>{guideBrowser === 'chrome' ? 'Chrome' : 'Safari'} Bookmarklet</strong> to retrieve your token:
+              </p>
+              
+              <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <strong style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', color: 'var(--color-primary)' }}>Step 1: Copy this code</strong>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <textarea 
+                    value={`javascript:(function(){var t=localStorage.getItem('token');if(t){alert('Your Device Token:\\n\\n'+t);console.log(t);}else{alert('Token not found. Make sure you are on ksps.co.id/eksternal/');}})();`}
+                    onClick={(e) => { e.target.focus(); e.target.select(); }}
+                    onChange={() => {}}
+                    style={{ flex: 1, height: '60px', padding: '0.4rem', fontSize: '0.75rem', fontFamily: 'monospace', background: 'rgba(0,0,0,0.3)', color: '#a78bfa', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '4px', resize: 'none' }}
+                  />
+                  <button 
+                    onClick={handleCopyBookmarklet}
+                    className="btn btn-primary"
+                    style={{ minWidth: 'auto', padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+              
+              {guideBrowser === 'chrome' ? (
+                <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: 0, fontSize: '0.85rem' }}>
+                  <li>Bookmark any random page in Chrome on your iPhone, and name it <strong>"Get Token"</strong>.</li>
+                  <li>Go to Chrome Bookmarks, click **Edit** on it, delete the URL, and paste the copied javascript code.</li>
+                  <li>Open Chrome on your iPhone and go to <code>https://ksps.co.id/eksternal/absen/remote</code>.</li>
+                  <li>Tap the browser address bar, type **"Get Token"** and click on the bookmark suggestion (with the star icon) that matches.</li>
+                  <li>An alert will pop up showing your registered Device Token! Copy and paste it here.</li>
+                </ol>
+              ) : (
+                <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', margin: 0, fontSize: '0.85rem' }}>
+                  <li>Add a bookmark for any random page in Safari on your iPhone, and name it <strong>"Get Token"</strong>.</li>
+                  <li>Edit that bookmark, delete the URL, and paste the copied javascript code from above into the URL field.</li>
+                  <li>Open Safari, log into <code>https://ksps.co.id/eksternal/</code>, and load the remote page.</li>
+                  <li>Tap your bookmark bar and click <strong>"Get Token"</strong>. Your registered token will pop up in an alert!</li>
+                  <li>Copy the token and paste it here in the app!</li>
+                </ol>
+              )}
             </div>
           </div>
         </div>

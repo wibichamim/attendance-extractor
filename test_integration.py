@@ -357,6 +357,41 @@ def test_endpoints():
             assert "LibreOffice" in pdf_data["error"]
             print("   - Direct PDF returned expected LibreOffice missing error (fine for sandbox)")
 
+        # 6. Test Remote Attendance Endpoint
+        print("\n6. Testing /api/remote-absen endpoint...")
+        mock_get_remote = MagicMock()
+        mock_get_remote.status_code = 200
+        mock_get_remote.text = '<html><meta name="csrf-token" content="mock-csrf-token-abc"><body><button class="logout">Logout (WIBI CHAMIM MUSHODIQ)</button></body></html>'
+        
+        mock_post_remote = MagicMock()
+        mock_post_remote.status_code = 200
+        mock_post_remote.text = '<html><body><div class="alert-success">Absensi remote berhasil dilakukan.</div></body></html>'
+        mock_post_remote.url = 'https://ksps.co.id/eksternal/absen/index'
+        
+        mock_session.get.side_effect = [mock_get_remote]
+        mock_session.post.return_value = mock_post_remote
+        
+        res = client.post('/api/remote-absen', json={
+            "session_cookie": "PHPSESSID=mock-php-sessid; _identity-absen-bisnis=mock-identity-token",
+            "latitude": "-7.7837217165",
+            "longitude": "110.4329516476",
+            "status": "0",
+            "device_token": "mock-device-token-xyz"
+        })
+        assert res.status_code == 200
+        remote_data = res.get_json()
+        assert remote_data["status"] == "success"
+        assert "berhasil" in remote_data["message"]
+        
+        # Assert parameters passed to post for remote absen
+        called_args, called_kwargs = mock_session.post.call_args
+        assert called_kwargs["data"]["Absen[token]"] == "mock-device-token-xyz"
+        assert called_kwargs["data"]["Absen[lintang]"] == "-7.7837217165"
+        
+        print("   - Remote check-in mock test successful")
+
+
+
         return True
 
 if __name__ == "__main__":

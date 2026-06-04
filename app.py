@@ -84,6 +84,30 @@ def serialize_records(records, year, month):
         "records": serialized
     }
 
+import json
+
+def get_stored_device_tokens():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_tokens.json")
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_device_token(username, token):
+    if not username:
+        return
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "device_tokens.json")
+    tokens = get_stored_device_tokens()
+    tokens[str(username)] = token
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(tokens, f, indent=2)
+    except Exception as e:
+        logger.error(f"Failed to save device tokens: {e}")
+
 # ---------------------------------------------------------------------------
 # API Endpoints
 # ---------------------------------------------------------------------------
@@ -190,11 +214,16 @@ def login_endpoint():
         except Exception as e:
             logger.warning(f"Could not fetch profile display name: {e}")
             
+        stored_tokens = get_stored_device_tokens()
+        device_token = stored_tokens.get(str(username), "")
+        
         return jsonify({
             "status": "success",
             "message": "Login successful",
             "display_name": display_name,
-            "session_cookie": session_cookie_str
+            "session_cookie": session_cookie_str,
+            "username": username,
+            "device_token": device_token
         })
         
     except requests.exceptions.RequestException as e:
@@ -203,6 +232,216 @@ def login_endpoint():
     except Exception as e:
         logger.error(f"Unexpected error in login: {e}", exc_info=True)
         return jsonify({"error": f"An unexpected login error occurred: {str(e)}"}), 500
+
+@app.route("/api/remote-absen", methods=["POST"])
+def remote_absen_endpoint():
+    """Submit remote check-in/check-out to ksps.co.id using active session cookie and coordinates."""
+    data = request.json or {}
+    session_cookie = data.get("session_cookie")
+    latitude = data.get("latitude", "-7.7837217165")
+    longitude = data.get("longitude", "110.4329516476")
+    status = data.get("status", "0")
+    device_token = data.get("device_token", "")
+    
+    if not session_cookie:
+        return jsonify({"error": "Session cookie is required"}), 400
+        
+    remote_url = "https://ksps.co.id/eksternal/absen/remote"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
+    # Parse cookie string into a dict
+    cookies = {}
+    for item in session_cookie.split(";"):
+        if "=" in item:
+            k, v = item.strip().split("=", 1)
+            cookies[k] = v
+            
+    try:
+        session = requests.Session()
+        # Set cookies in session
+        for k, v in cookies.items():
+            session.cookies.set(k, v, domain="ksps.co.id")
+            
+        # Step 1: GET the remote page to retrieve a fresh CSRF token
+        logger.info("Fetching remote page to retrieve CSRF token...")
+        get_res = session.get(remote_url, headers=headers, timeout=15)
+        
+        if get_res.status_code != 200:
+            return jsonify({"error": f"Failed to load remote page: HTTP {get_res.status_code}"}), get_res.status_code
+            
+        soup = BeautifulSoup(get_res.text, "html.parser")
+        
+        # Enforce administrative access control: only WIBI CHAMIM MUSHODIQ is authorized
+        logout_btn = soup.find("button", class_="logout")
+        is_authorized = False
+        if logout_btn:
+            btn_text = logout_btn.get_text()
+            if "WIBI CHAMIM MUSHODIQ" in btn_text:
+                is_authorized = True
+                
+        if not is_authorized:
+            try:
+                test_res = session.get("https://ksps.co.id/eksternal/", headers=headers, timeout=10)
+                if test_res.status_code == 200:
+                    test_soup = BeautifulSoup(test_res.text, "html.parser")
+                    test_btn = test_soup.find("button", class_="logout")
+                    if test_btn and "WIBI CHAMIM MUSHODIQ" in test_btn.get_text():
+                        is_authorized = True
+            except Exception:
+                pass
+                
+        if not is_authorized:
+            logger.warning("Unauthorized user attempted remote punch.")
+            return jsonify({"error": "Akses ditolak. Fitur ini hanya untuk pengguna terotorisasi."}), 403
+        
+        # Log forms and input fields for diagnostic purposes
+        forms = soup.find_all("form")
+        logger.info(f"Found {len(forms)} forms on remote page.")
+        for idx, f in enumerate(forms):
+            logger.info(f"Form {idx}: action={f.get('action')}, method={f.get('method')}")
+            for ipt in f.find_all(["input", "select", "textarea"]):
+                logger.info(f"  Input: name={ipt.get('name')}, type={ipt.get('type')}, value={ipt.get('value')}")
+        
+        # Extract CSRF token from page
+        csrf_meta = soup.find("meta", {"name": "csrf-token"})
+        csrf_token = csrf_meta["content"] if csrf_meta else None
+        
+        if not csrf_token:
+            csrf_input = soup.find("input", {"name": "_csrf-absen-bisnis"})
+            csrf_token = csrf_input["value"] if csrf_input else None
+            
+        if not csrf_token:
+            csrf_token = cookies.get("_csrf-absen-bisnis", "")
+            
+        logger.info(f"Retrieved CSRF token for remote attendance: {csrf_token[:10]}...")
+        
+        # Step 2: POST the form data to the remote endpoint
+        post_data = {
+            "_csrf-absen-bisnis": csrf_token,
+            "Absen[lintang]": latitude,
+            "Absen[bujur]": longitude,
+            "Absen[token]": str(device_token),
+            "Absen[status]": str(status)
+        }
+        
+        logger.info(f"Submitting remote attendance: status={status}, lat={latitude}, lng={longitude}, token={device_token}")
+        post_res = session.post(remote_url, data=post_data, headers=headers, timeout=15)
+        logger.info(f"POST response status: {post_res.status_code}")
+        
+        # Save response HTML for diagnostics
+        if post_res.status_code == 200:
+            error_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "remote_response_error.html")
+            try:
+                with open(error_file_path, "w", encoding="utf-8") as f:
+                    f.write(post_res.text)
+                logger.info(f"Saved remote response HTML for diagnostics to: {error_file_path}")
+            except Exception as ex:
+                logger.error(f"Failed to save diagnostic HTML file: {ex}")
+        
+        # Parse the response page for errors
+        post_soup = BeautifulSoup(post_res.text, "html.parser")
+        alert_success = post_soup.find("div", class_="alert-success")
+        alert_danger = post_soup.find("div", class_="alert-danger")
+        alert_warning = post_soup.find("div", class_="alert-warning")
+        
+        error_msg = ""
+        success_msg = ""
+        
+        # Parse activeform/validation errors
+        yii_errors = []
+        for error_div in post_soup.find_all(class_=["help-block", "help-block-error", "invalid-feedback"]):
+            txt = error_div.get_text(strip=True)
+            if txt:
+                yii_errors.append(txt)
+        # Search for form group error states
+        for fg in post_soup.find_all(class_="has-error"):
+            lbl = fg.find("label")
+            lbl_txt = lbl.get_text(strip=True) if lbl else ""
+            help_blk = fg.find(class_=["help-block", "help-block-error"])
+            help_txt = help_blk.get_text(strip=True) if help_blk else ""
+            if help_txt:
+                yii_errors.append(f"{lbl_txt}: {help_txt}" if lbl_txt else help_txt)
+                
+        if yii_errors:
+            error_msg = " | ".join(set(yii_errors))
+            logger.warning(f"Yii2 validation errors extracted: {error_msg}")
+        
+        if alert_success:
+            btn = alert_success.find("button", class_="close")
+            if btn:
+                btn.decompose()
+            success_msg = alert_success.get_text(strip=True)
+        if alert_danger:
+            btn = alert_danger.find("button", class_="close")
+            if btn:
+                btn.decompose()
+            error_msg = alert_danger.get_text(strip=True)
+        elif alert_warning:
+            btn = alert_warning.find("button", class_="close")
+            if btn:
+                btn.decompose()
+            error_msg = alert_warning.get_text(strip=True)
+            
+        # Check URL redirection to verify success or failure
+        if "/absen/index" in post_res.url:
+            success_msg = success_msg or "Absensi remote berhasil dilakukan."
+        elif "/absen/remote" in post_res.url:
+            if not error_msg:
+                # If we stayed on the remote form page and no error was parsed, it's a failure
+                error_msg = "Absensi remote gagal. Halaman form dimuat kembali (kemungkinan parameter atau batas waktu salah)."
+        else:
+            # Any other page redirection or no redirect
+            if not error_msg and not success_msg:
+                success_msg = "Absensi remote dikirim."
+                
+        if post_res.status_code != 200:
+            error_msg = error_msg or f"HTTP Error {post_res.status_code} saat mengirim absensi."
+            
+        if error_msg:
+            return jsonify({"status": "error", "message": error_msg}), 400
+        else:
+            return jsonify({"status": "success", "message": success_msg or "Absensi remote berhasil."})
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error during remote attendance request: {e}")
+        return jsonify({"error": f"Failed to connect to ksps.co.id: {str(e)}"}), 502
+    except Exception as e:
+        logger.error(f"Error performing remote attendance: {e}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+
+@app.route("/api/get-device-token", methods=["GET"])
+def get_device_token_endpoint():
+    """Retrieve the stored device token for a given username or fallback to the first available."""
+    username = request.args.get("username")
+    tokens = get_stored_device_tokens()
+    
+    token = ""
+    if username and str(username) in tokens:
+        token = tokens[str(username)]
+    elif tokens:
+        token = list(tokens.values())[0]
+        
+    return jsonify({
+        "status": "success",
+        "device_token": token
+    })
+
+@app.route("/api/save-device-token", methods=["POST"])
+def save_device_token_endpoint():
+    """Save/update the device token on the server for a specific username."""
+    data = request.json or {}
+    username = data.get("username")
+    device_token = data.get("device_token", "")
+    
+    if not username:
+        return jsonify({"error": "Username is required"}), 400
+        
+    save_device_token(username, device_token)
+    return jsonify({"status": "success", "message": "Device token saved on server."})
 
 @app.route("/api/parse-html-file", methods=["POST"])
 def parse_html_file_endpoint():
