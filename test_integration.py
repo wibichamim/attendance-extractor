@@ -63,6 +63,13 @@ def test_integration():
             pulang = r.pulang
             keterangan = r.keterangan
             
+            if r.tgl == 2:
+                # Day 2 is Saturday. Set check-out only to test weekend attendance detection
+                masuk = None
+                pulang = "12:00"
+                keterangan = None
+                print(f"   - Edited Day 2 to: in={masuk} out={pulang} (checkout-only weekend test)")
+                
             if r.tgl == 5:
                 masuk = "08:15"
                 pulang = "17:45"
@@ -127,18 +134,31 @@ def test_integration():
             # Find table offsets dynamically
             h_row, s_col = find_table_coordinates(ws)
             if h_row is None:
+                day_2_row = 2
+                day_2_masuk_col = 2
+                day_2_pulang_col = 3
                 day_5_row = 5
                 day_5_masuk_col = 2
                 day_5_pulang_col = 3
                 day_8_row = 8
                 day_8_masuk_col = 2
             else:
+                day_2_row = h_row + 2
+                day_2_masuk_col = s_col + 1
+                day_2_pulang_col = s_col + 2
                 day_5_row = h_row + 5
                 day_5_masuk_col = s_col + 1
                 day_5_pulang_col = s_col + 2
                 day_8_row = h_row + 8
                 day_8_masuk_col = s_col + 1
                 
+            # Verify Day 2 checkout-only weekend times
+            val_masuk_2 = ws.cell(row=day_2_row, column=day_2_masuk_col).value
+            val_pulang_2 = ws.cell(row=day_2_row, column=day_2_pulang_col).value
+            print(f"   - Excel Day 2: Row {day_2_row}, Col {day_2_masuk_col}='{val_masuk_2}' Col {day_2_pulang_col}='{val_pulang_2}'")
+            assert val_masuk_2 is None, f"Expected None, got '{val_masuk_2}'"
+            assert val_pulang_2 == "12:00", f"Expected '12:00', got '{val_pulang_2}'"
+
             # Verify Day 5 edited times
             val_masuk_5 = ws.cell(row=day_5_row, column=day_5_masuk_col).value
             val_pulang_5 = ws.cell(row=day_5_row, column=day_5_pulang_col).value

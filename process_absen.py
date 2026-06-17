@@ -85,8 +85,8 @@ class AttendanceRecord:
 
     @property
     def has_attendance(self) -> bool:
-        """True when the employee has at least a check-in record."""
-        return self.masuk is not None
+        """True when the employee has at least a check-in or check-out record."""
+        return self.masuk is not None or self.pulang is not None
 
     def __repr__(self) -> str:
         if self.is_holiday_or_leave:

@@ -185,11 +185,20 @@ export default function App() {
       const dayOfWeek = d.getDay() // 0 = Sunday, 6 = Saturday
       const isWknd = dayOfWeek === 0 || dayOfWeek === 6
       
-      // Auto-change to holiday if it is a weekend and has no attendance data
-      const isHoliday = r.is_holiday_or_leave || (isWknd && !r.has_attendance)
+      // Check if there is actual attendance (masuk or pulang has values and not empty or '-')
+      const hasActualAttendance = (r.masuk && r.masuk !== '-' && r.masuk.trim() !== '') || 
+                                  (r.pulang && r.pulang !== '-' && r.pulang.trim() !== '')
+
+      // Auto-detect and select as normal day if any check-in/out record is detected during holidays
+      const isHoliday = (r.is_holiday_or_leave || isWknd) && !hasActualAttendance
+      
       let keterangan = r.keterangan
-      if (isWknd && !r.has_attendance && !keterangan) {
-        keterangan = dayOfWeek === 6 ? 'LIBUR - SABTU' : 'LIBUR - MINGGU'
+      if (isHoliday) {
+        if (isWknd && !keterangan) {
+          keterangan = dayOfWeek === 6 ? 'LIBUR - SABTU' : 'LIBUR - MINGGU'
+        }
+      } else {
+        keterangan = null
       }
 
       return {
@@ -197,6 +206,7 @@ export default function App() {
         keterangan: keterangan,
         rowType: isHoliday ? 'holiday' : 'normal',
         is_holiday_or_leave: isHoliday,
+        has_attendance: hasActualAttendance || r.has_attendance,
         // Keep track of validation states
         masukInvalid: r.masuk && r.masuk !== '-' && !TIME_REGEX.test(r.masuk),
         pulangInvalid: r.pulang && r.pulang !== '-' && !TIME_REGEX.test(r.pulang)
@@ -523,22 +533,52 @@ export default function App() {
     setTableData(updated)
   }
 
+  const formatTimeInput = (value, prevValue = '') => {
+    if (value === '-') {
+      return '-';
+    }
+    
+    // If deleting, don't auto-append colon
+    if (prevValue && value.length < prevValue.length) {
+      return value;
+    }
+
+    // Clean non-digits
+    let clean = value.replace(/[^0-9]/g, '');
+    if (clean.length > 4) {
+      clean = clean.slice(0, 4);
+    }
+
+    if (clean.length > 2) {
+      return `${clean.slice(0, 2)}:${clean.slice(2)}`;
+    } else if (clean.length === 2) {
+      return `${clean}:`;
+    }
+    return clean;
+  };
+
   const handleCellChange = (index, field, value) => {
     const updated = [...tableData]
     const row = updated[index]
-    row[field] = value === '' ? null : value
+    
+    let processedValue = value;
+    if (field === 'masuk' || field === 'pulang') {
+      processedValue = formatTimeInput(value, row[field] || '');
+    }
+    
+    row[field] = processedValue === '' ? null : processedValue
     
     // Perform validations
     if (field === 'masuk') {
-      row.masukInvalid = value !== '' && value !== '-' && !TIME_REGEX.test(value)
+      row.masukInvalid = processedValue !== '' && processedValue !== '-' && !TIME_REGEX.test(processedValue)
       row.has_attendance = (row.masuk !== null && row.masuk !== '') || (row.pulang !== null && row.pulang !== '')
     }
     if (field === 'pulang') {
-      row.pulangInvalid = value !== '' && value !== '-' && !TIME_REGEX.test(value)
+      row.pulangInvalid = processedValue !== '' && processedValue !== '-' && !TIME_REGEX.test(processedValue)
       row.has_attendance = (row.masuk !== null && row.masuk !== '') || (row.pulang !== null && row.pulang !== '')
     }
     if (field === 'keterangan') {
-      row.is_holiday_or_leave = value !== null && value !== ''
+      row.is_holiday_or_leave = processedValue !== null && processedValue !== ''
     }
     
     setTableData(updated)
@@ -871,7 +911,7 @@ export default function App() {
           </div>
         </div>
         
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="header-actions">
           <button
             onClick={() => setTheme(prev => prev === 'dark' ? 'light' : 'dark')}
             className="btn btn-secondary"
@@ -1412,10 +1452,10 @@ export default function App() {
               </p>
             </div>
             
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className="table-actions">
               <button 
                 onClick={handleShowPreview}
-                className="btn btn-secondary"
+                className="btn btn-secondary table-action-btn"
                 disabled={isLoading || isGeneratingPreview}
               >
                 {isGeneratingPreview ? <RefreshCw className="spinner" size={16} /> : <Eye size={16} />}
@@ -1423,7 +1463,7 @@ export default function App() {
               </button>
               <button 
                 onClick={handleGenerateXLSX}
-                className="btn btn-success"
+                className="btn btn-success table-action-btn"
                 disabled={isLoading}
               >
                 <Download size={16} />
@@ -1436,11 +1476,11 @@ export default function App() {
             <table className="attendance-table">
               <thead>
                 <tr>
-                  <th style={{ width: '60px', textAlign: 'center' }}>Day</th>
-                  <th style={{ width: '130px' }}>Weekday</th>
-                  <th style={{ width: '150px' }}>Row Type</th>
-                  <th style={{ width: '150px', textAlign: 'center' }}>Check-in (Masuk)</th>
-                  <th style={{ width: '150px', textAlign: 'center' }}>Check-out (Pulang)</th>
+                  <th style={{ width: '50px', textAlign: 'center' }}>Day</th>
+                  <th style={{ width: '100px' }}>Weekday</th>
+                  <th style={{ width: '130px' }}>Row Type</th>
+                  <th style={{ width: '110px', textAlign: 'center' }}>Check-in (Masuk)</th>
+                  <th style={{ width: '110px', textAlign: 'center' }}>Check-out (Pulang)</th>
                   <th>Holiday / Weekend Remark (Keterangan)</th>
                 </tr>
               </thead>
@@ -1448,6 +1488,8 @@ export default function App() {
                 {tableData.map((row, idx) => {
                   const weekend = isWeekend(row.tgl)
                   const weekdayName = getWeekdayName(row.tgl)
+                  const isMasukEmpty = row.rowType === 'normal' && (!row.masuk || row.masuk === '-' || row.masuk.trim() === '')
+                  const isPulangEmpty = row.rowType === 'normal' && (!row.pulang || row.pulang === '-' || row.pulang.trim() === '')
                   
                   return (
                     <tr 
@@ -1490,34 +1532,50 @@ export default function App() {
                         /* Normal cell inputs for attendance */
                         <>
                           <td>
-                            <input 
-                              type="text" 
-                              value={row.masuk || ''} 
-                              onChange={(e) => handleCellChange(idx, 'masuk', e.target.value)}
-                              placeholder="HH:MM"
-                              className={`cell-input ${row.masukInvalid ? 'invalid' : ''}`}
-                              title="Time must be in 24h format (HH:MM) or empty / '-'"
-                            />
-                            {row.masukInvalid && (
-                              <div style={{ color: 'var(--color-danger)', fontSize: '0.7rem', marginTop: '0.15rem', textAlign: 'center' }}>
-                                Invalid HH:MM
-                              </div>
-                            )}
+                            <div className="cell-input-wrapper">
+                              <input 
+                                type="text" 
+                                value={row.masuk || ''} 
+                                onChange={(e) => handleCellChange(idx, 'masuk', e.target.value)}
+                                placeholder="HH:MM"
+                                className={`cell-input ${row.masukInvalid ? 'invalid' : (isMasukEmpty ? 'warning' : '')}`}
+                                title="Time must be in 24h format (HH:MM) or empty / '-'"
+                              />
+                              {row.masukInvalid ? (
+                                <div className="cell-error-text">
+                                  Invalid HH:MM
+                                </div>
+                              ) : (
+                                isMasukEmpty && (
+                                  <div className="cell-warning-text">
+                                    Missing check-in
+                                  </div>
+                                )
+                              )}
+                            </div>
                           </td>
                           <td>
-                            <input 
-                              type="text" 
-                              value={row.pulang || ''} 
-                              onChange={(e) => handleCellChange(idx, 'pulang', e.target.value)}
-                              placeholder="HH:MM"
-                              className={`cell-input ${row.pulangInvalid ? 'invalid' : ''}`}
-                              title="Time must be in 24h format (HH:MM) or empty / '-'"
-                            />
-                            {row.pulangInvalid && (
-                              <div style={{ color: 'var(--color-danger)', fontSize: '0.7rem', marginTop: '0.15rem', textAlign: 'center' }}>
-                                Invalid HH:MM
-                              </div>
-                            )}
+                            <div className="cell-input-wrapper">
+                              <input 
+                                type="text" 
+                                value={row.pulang || ''} 
+                                onChange={(e) => handleCellChange(idx, 'pulang', e.target.value)}
+                                placeholder="HH:MM"
+                                className={`cell-input ${row.pulangInvalid ? 'invalid' : (isPulangEmpty ? 'warning' : '')}`}
+                                title="Time must be in 24h format (HH:MM) or empty / '-'"
+                              />
+                              {row.pulangInvalid ? (
+                                <div className="cell-error-text">
+                                  Invalid HH:MM
+                                </div>
+                              ) : (
+                                isPulangEmpty && (
+                                  <div className="cell-warning-text">
+                                    Missing check-out
+                                  </div>
+                                )
+                              )}
+                            </div>
                           </td>
                           <td style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>
                             Ready to write attendance data
@@ -1531,21 +1589,19 @@ export default function App() {
             </table>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '0.5rem' }}>
+          <div className="table-actions bottom-actions">
             <button 
               onClick={handleShowPreview}
-              className="btn btn-secondary"
+              className="btn btn-secondary table-action-btn"
               disabled={isLoading || isGeneratingPreview}
-              style={{ padding: '0.8rem 1.5rem', fontSize: '1rem' }}
             >
               {isGeneratingPreview ? <RefreshCw className="spinner" size={18} /> : <Eye size={18} />}
               Show Preview & PDF
             </button>
             <button 
               onClick={handleGenerateXLSX}
-              className="btn btn-success"
+              className="btn btn-success table-action-btn"
               disabled={isLoading}
-              style={{ padding: '0.8rem 2rem', fontSize: '1rem' }}
             >
               <Download size={18} />
               Generate & Download XLSX
@@ -1565,25 +1621,22 @@ export default function App() {
               <div className="preview-modal-actions">
                 <button 
                   onClick={handlePrintPreview}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', minHeight: 'auto' }}
+                  className="btn btn-secondary preview-action-btn"
                 >
                   <Printer size={15} />
-                  Print / Save as PDF
+                  <span>Print / Save as PDF</span>
                 </button>
                 <button 
                   onClick={handleDownloadPDF}
-                  className="btn btn-primary"
-                  style={{ padding: '0.45rem 1rem', fontSize: '0.85rem', minHeight: 'auto' }}
+                  className="btn btn-primary preview-action-btn"
                   disabled={isGeneratingPdf}
                 >
                   {isGeneratingPdf ? <RefreshCw className="spinner" size={15} /> : <Download size={15} />}
-                  {pdfSupported ? 'Download PDF' : 'Download PDF (Requires LibreOffice)'}
+                  <span>{pdfSupported ? 'Download PDF' : 'Download PDF (Fallback)'}</span>
                 </button>
                 <button 
                   onClick={() => setIsPreviewOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.45rem', minWidth: 'auto', minHeight: 'auto' }}
+                  className="btn btn-secondary preview-close-btn"
                   title="Close Preview"
                 >
                   <X size={16} />
