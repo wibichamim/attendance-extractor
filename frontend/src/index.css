@@ -986,3 +986,30 @@ textarea {
     margin-top: 0;
   }
 }
+
+/* Leaflet Map Integration */
+.map-container-wrapper {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  position: relative;
+  height: 280px;
+  background-color: var(--bg-input);
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 10;
+}
+
+/* Dark/Light mode tile filter adjustment for OpenStreetMap tiles */
+.leaflet-tile {
+  filter: contrast(95%) brightness(95%);
+}
+:root:not(.light) .leaflet-tile {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
+}
+

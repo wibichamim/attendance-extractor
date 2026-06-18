@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { 
   Calendar, 
   Upload, 
@@ -19,8 +19,69 @@ import {
   Moon
 } from 'lucide-react'
 
+import 'leaflet/dist/leaflet.css'
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet'
+import L from 'leaflet'
+
+
 // Regular expression to validate HH:MM time format
 const TIME_REGEX = /^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/
+
+// Custom Leaflet SVG Icon to prevent bundle resolving issues in Vite
+const MAP_MARKER_ICON = new L.Icon({
+  iconUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ef4444" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
+  iconSize: [36, 36],
+  iconAnchor: [18, 36],
+  popupAnchor: [0, -36]
+})
+
+// Helper component to center leaflet map on external coordinate updates (e.g. inputs, GPS buttons)
+function MapCenterController({ center }) {
+  const map = useMap()
+  useEffect(() => {
+    if (center && center[0] !== undefined && center[1] !== undefined) {
+      map.setView(center, map.getZoom())
+    }
+  }, [center, map])
+  return null
+}
+
+// Helper component to handle user click on map
+function MapClickHandler({ onLocationSelect }) {
+  useMapEvents({
+    click(e) {
+      onLocationSelect(e.latlng.lat, e.latlng.lng)
+    }
+  })
+  return null
+}
+
+// Helper component for draggable marker that updates state on dragend
+function CoordinateMarker({ position, onPositionChange }) {
+  const markerRef = useRef(null)
+  const eventHandlers = useMemo(
+    () => ({
+      dragend() {
+        const marker = markerRef.current
+        if (marker != null) {
+          const latLng = marker.getLatLng()
+          onPositionChange(latLng.lat, latLng.lng)
+        }
+      },
+    }),
+    [onPositionChange]
+  )
+  
+  return (
+    <Marker
+      draggable={true}
+      eventHandlers={eventHandlers}
+      position={position}
+      icon={MAP_MARKER_ICON}
+      ref={markerRef}
+    />
+  )
+}
 
 export default function App() {
   // App connection & states
@@ -1297,6 +1358,44 @@ export default function App() {
                   <Globe size={14} />
                   Get GPS Location
                 </button>
+              </div>
+
+              <div className="map-container-wrapper">
+                <MapContainer
+                  center={[
+                    isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
+                    isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                  ]}
+                  zoom={15}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <CoordinateMarker
+                    position={[
+                      isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
+                      isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                    ]}
+                    onPositionChange={(lat, lng) => {
+                      setLatitude(lat.toFixed(10))
+                      setLongitude(lng.toFixed(10))
+                    }}
+                  />
+                  <MapClickHandler
+                    onLocationSelect={(lat, lng) => {
+                      setLatitude(lat.toFixed(10))
+                      setLongitude(lng.toFixed(10))
+                    }}
+                  />
+                  <MapCenterController
+                    center={[
+                      isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
+                      isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                    ]}
+                  />
+                </MapContainer>
               </div>
 
               <div style={{ display: 'flex', gap: '0.75rem' }}>
