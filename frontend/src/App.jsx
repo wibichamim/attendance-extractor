@@ -27,6 +27,26 @@ import L from 'leaflet'
 // Regular expression to validate HH:MM time format
 const TIME_REGEX = /^(0[0-9]|1[0-9]|2[0-3]):[0-5][0-9]$/
 
+const DEFAULT_LAT = -7.7837217165
+const DEFAULT_LNG = 110.4329516476
+
+// Helper to get randomized location within 30 meters of default
+function getRandomizedLocation() {
+  const radius = 30; // 30 meters
+  const r = radius * Math.sqrt(Math.random());
+  const theta = Math.random() * 2 * Math.PI;
+  const dy = r * Math.sin(theta);
+  const dx = r * Math.cos(theta);
+  
+  const deltaLat = dy / 111111;
+  const deltaLng = dx / (111111 * Math.cos(DEFAULT_LAT * Math.PI / 180));
+  
+  return {
+    latitude: (DEFAULT_LAT + deltaLat).toFixed(10),
+    longitude: (DEFAULT_LNG + deltaLng).toFixed(10)
+  };
+}
+
 // Custom Leaflet SVG Icon to prevent bundle resolving issues in Vite
 const MAP_MARKER_ICON = new L.Icon({
   iconUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23ef4444" width="36" height="36"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
@@ -127,9 +147,12 @@ export default function App() {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false)
 
-  // Remote Attendance states
-  const [latitude, setLatitude] = useState('-7.7837217165')
-  const [longitude, setLongitude] = useState('110.4329516476')
+  // Remote Attendance states (randomized within 30m of default location on refresh)
+  const [coords, setCoords] = useState(getRandomizedLocation)
+  const latitude = coords.latitude
+  const longitude = coords.longitude
+  const setLatitude = (lat) => setCoords(prev => ({ ...prev, latitude: typeof lat === 'function' ? lat(prev.latitude) : lat }))
+  const setLongitude = (lng) => setCoords(prev => ({ ...prev, longitude: typeof lng === 'function' ? lng(prev.longitude) : lng }))
   const [isSubmittingRemote, setIsSubmittingRemote] = useState(false)
   const [deviceToken, setDeviceToken] = useState('')
   const [isIphoneModalOpen, setIsIphoneModalOpen] = useState(false)
@@ -1363,8 +1386,8 @@ export default function App() {
               <div className="map-container-wrapper">
                 <MapContainer
                   center={[
-                    isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
-                    isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                    isNaN(parseFloat(latitude)) ? DEFAULT_LAT : parseFloat(latitude),
+                    isNaN(parseFloat(longitude)) ? DEFAULT_LNG : parseFloat(longitude)
                   ]}
                   zoom={15}
                   scrollWheelZoom={true}
@@ -1375,8 +1398,8 @@ export default function App() {
                   />
                   <CoordinateMarker
                     position={[
-                      isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
-                      isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                      isNaN(parseFloat(latitude)) ? DEFAULT_LAT : parseFloat(latitude),
+                      isNaN(parseFloat(longitude)) ? DEFAULT_LNG : parseFloat(longitude)
                     ]}
                     onPositionChange={(lat, lng) => {
                       setLatitude(lat.toFixed(10))
@@ -1391,8 +1414,8 @@ export default function App() {
                   />
                   <MapCenterController
                     center={[
-                      isNaN(parseFloat(latitude)) ? -7.7837217165 : parseFloat(latitude),
-                      isNaN(parseFloat(longitude)) ? 110.4329516476 : parseFloat(longitude)
+                      isNaN(parseFloat(latitude)) ? DEFAULT_LAT : parseFloat(latitude),
+                      isNaN(parseFloat(longitude)) ? DEFAULT_LNG : parseFloat(longitude)
                     ]}
                   />
                 </MapContainer>
